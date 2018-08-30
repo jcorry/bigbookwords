@@ -1,0 +1,27 @@
+// bigbookwords/proto/dictionary.proto
+syntax = "proto3";
+
+package go.micro.srv.dictionary;
+
+service DictionaryService {
+    rpc GetWords(GetRequest) returns (Response) {}
+    rpc GetWord(GetRequest) returns (Response) {}
+    rpc Search(GetRequest) returns (Response) {}
+}
+
+message Word {
+    string id = 1;
+    string word = 2;
+    string definition = 3;
+    string pronounciation = 4;
+    int32 appearances = 5;
+}
+
+message GetRequest {
+    string Query = 1;
+}
+
+message Response {
+    Word word = 1;
+    repeated Word words = 2;
+}
