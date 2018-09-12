@@ -1,12 +1,11 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strings"
+	"os"
 
 	pb "github.com/jcorry/bigbookwords/dictionary-service/proto/dictionary"
 
@@ -14,86 +13,46 @@ import (
 )
 
 const (
-	sourceFile = "./dictionary.json"
+	sourceFile  = "./dictionary.json"
+	defaultHost = "datastore:27017"
 )
 
-type Repository interface {
-	Get(string) (*pb.Word, error)
-	GetAll() []*pb.Word
-	Search(string) ([]*pb.Word, error)
-}
-
-type DictionaryRepository struct {
-	words []*pb.Word
-}
-
-func (repo *DictionaryRepository) Get(word string) (*pb.Word, error) {
-	allWords := repo.GetAll()
-	for i := range allWords {
-		if allWords[i].Word == word {
-			return allWords[i], nil
-		}
-	}
-	return nil, fmt.Errorf("No word found in dictionary: %s", word)
-}
-
-func (repo *DictionaryRepository) GetAll() []*pb.Word {
-	return repo.words
-}
-
-func (repo *DictionaryRepository) Search(searchTerm string) ([]*pb.Word, error) {
-	allWords := repo.GetAll()
-	var returnWords []*pb.Word
-	for i := range allWords {
-		if strings.Contains(allWords[i].Word, searchTerm) {
-			returnWords = append(returnWords, allWords[i])
-		}
-	}
-	if len(returnWords) == 0 {
-		return nil, fmt.Errorf("No word found in dictionary matching search string: %s", searchTerm)
-	}
-	return returnWords, nil
-}
-
-type service struct {
-	repo DictionaryRepository
-}
-
-func (s *service) GetWord(ctx context.Context, req *pb.GetRequest, res *pb.Response) error {
-	word, err := s.repo.Get(req.Query)
-	if err != nil {
-		return err
-	}
-	res.Word = word
-	return nil
-}
-
-func (s *service) GetWords(ctx context.Context, req *pb.GetRequest, res *pb.Response) error {
-	words := s.repo.GetAll()
-	res.Words = words
-	return nil
-}
-
-func (s *service) Search(ctx context.Context, req *pb.GetRequest, res *pb.Response) error {
-	words, err := s.repo.Search(req.Query)
-	if err != nil {
-		return err
-	}
-	res.Words = words
-	return nil
-}
-
 func main() {
-	repo := &DictionaryRepository{}
+	host := os.Getenv("DB_HOST")
 
-	if len(repo.words) == 0 {
+	if host == "" {
+		host = defaultHost
+	}
+
+	session, err := CreateSession(host)
+
+	if err != nil {
+		log.Panicf("Could not connect to datastore with host %s - %v", host, err)
+	} else {
+		log.Println("Connected to datastore...")
+	}
+
+	service := service{session}
+
+	defer service.GetRepo().Remove()
+	defer session.Close()
+
+	repoWords, err := service.GetRepo().GetAll()
+	check(err)
+
+	if len(repoWords) == 0 {
 		log.Println("Loading words from dictionary file.")
 		data, err := ioutil.ReadFile(sourceFile)
 		check(err)
-		err = json.Unmarshal(data, &repo.words)
-		check(err)
-
-		log.Printf("Loaded %d words", len(repo.words))
+		// load words from data into repo
+		words := make([]*pb.Word, 0)
+		json.Unmarshal(data, &words)
+		for _, word := range words {
+			err = service.GetRepo().Insert(word)
+			check(err)
+		}
+	} else {
+		log.Println(fmt.Sprintf("Found %d words in dictionary", len(repoWords)))
 	}
 
 	srv := micro.NewService(
@@ -102,7 +61,7 @@ func main() {
 	)
 	srv.Init()
 
-	pb.RegisterDictionaryServiceHandler(srv.Server(), &service{repo})
+	pb.RegisterDictionaryServiceHandler(srv.Server(), &service)
 
 	if err := srv.Run(); err != nil {
 		fmt.Println(err)

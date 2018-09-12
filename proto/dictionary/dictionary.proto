@@ -10,11 +10,11 @@ service DictionaryService {
 }
 
 message Word {
-    string id = 1;
-    string word = 2;
-    string definition = 3;
-    string pronounciation = 4;
-    int32 appearances = 5;
+    string Id = 1;
+    string Word = 2;
+    string Definition = 3;
+    string Pronounciation = 4;
+    int32 Appearances = 5;
 }
 
 message GetRequest {

@@ -34,7 +34,7 @@ func main() {
 	start = time.Now()
 	result, err := client.GetWord(context.Background(), &pb.GetRequest{Query: `loath`})
 	if err != nil {
-		log.Fatalf("Count not get single word: %v", err)
+		log.Fatalf("Could not get single word: %v", err)
 	}
 	log.Printf("The word %s appears %d times", result.Word.GetWord(), result.Word.GetAppearances())
 	fmt.Println("")
